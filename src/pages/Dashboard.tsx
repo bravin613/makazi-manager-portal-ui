@@ -1,5 +1,5 @@
-
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,22 +22,17 @@ import {
   LogOut
 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { toast } from "sonner";
-
-interface Landlord {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  address: string;
-  createdAt: string;
-}
+import { useAuth } from '@/hooks/useAuth';
+import { useLandlords, Landlord } from '@/hooks/useLandlords';
 
 const Dashboard = () => {
+  const { user, loading: authLoading, signOut } = useAuth();
+  const { landlords, loading: landlordsLoading, addLandlord, updateLandlord, deleteLandlord } = useLandlords();
+  const navigate = useNavigate();
+  
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-  const [landlords, setLandlords] = useState<Landlord[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingLandlord, setEditingLandlord] = useState<Landlord | null>(null);
@@ -48,36 +43,29 @@ const Dashboard = () => {
     address: ''
   });
 
-  // Mock data for demonstration
+  // Redirect to auth if not logged in
   useEffect(() => {
-    const mockLandlords: Landlord[] = [
-      {
-        id: '1',
-        name: 'John Smith',
-        email: 'john.smith@email.com',
-        phone: '+1 (555) 123-4567',
-        address: '123 Main St, City, State 12345',
-        createdAt: '2024-01-15'
-      },
-      {
-        id: '2',
-        name: 'Sarah Johnson',
-        email: 'sarah.johnson@email.com',
-        phone: '+1 (555) 987-6543',
-        address: '456 Oak Ave, City, State 12345',
-        createdAt: '2024-01-20'
-      },
-      {
-        id: '3',
-        name: 'Michael Brown',
-        email: 'michael.brown@email.com',
-        phone: '+1 (555) 456-7890',
-        address: '789 Pine St, City, State 12345',
-        createdAt: '2024-02-01'
-      }
-    ];
-    setLandlords(mockLandlords);
-  }, []);
+    if (!authLoading && !user) {
+      navigate('/auth');
+    }
+  }, [user, authLoading, navigate]);
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated
+  if (!user) {
+    return null;
+  }
 
   const filteredLandlords = landlords.filter(landlord =>
     landlord.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -85,22 +73,16 @@ const Dashboard = () => {
     landlord.phone.includes(searchTerm)
   );
 
-  const handleAddLandlord = () => {
+  const handleAddLandlord = async () => {
     if (!formData.name || !formData.email || !formData.phone || !formData.address) {
-      toast.error('Please fill in all fields');
       return;
     }
 
-    const newLandlord: Landlord = {
-      id: Date.now().toString(),
-      ...formData,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-
-    setLandlords([...landlords, newLandlord]);
-    setFormData({ name: '', email: '', phone: '', address: '' });
-    setIsAddDialogOpen(false);
-    toast.success('Landlord added successfully!');
+    const result = await addLandlord(formData);
+    if (result) {
+      setFormData({ name: '', email: '', phone: '', address: '' });
+      setIsAddDialogOpen(false);
+    }
   };
 
   const handleEditLandlord = (landlord: Landlord) => {
@@ -113,25 +95,23 @@ const Dashboard = () => {
     });
   };
 
-  const handleUpdateLandlord = () => {
+  const handleUpdateLandlord = async () => {
     if (!editingLandlord) return;
 
-    const updatedLandlords = landlords.map(landlord =>
-      landlord.id === editingLandlord.id
-        ? { ...landlord, ...formData }
-        : landlord
-    );
-
-    setLandlords(updatedLandlords);
-    setEditingLandlord(null);
-    setFormData({ name: '', email: '', phone: '', address: '' });
-    toast.success('Landlord updated successfully!');
+    const result = await updateLandlord(editingLandlord.id, formData);
+    if (result) {
+      setEditingLandlord(null);
+      setFormData({ name: '', email: '', phone: '', address: '' });
+    }
   };
 
-  const handleDeleteLandlord = (id: string) => {
-    const updatedLandlords = landlords.filter(landlord => landlord.id !== id);
-    setLandlords(updatedLandlords);
-    toast.success('Landlord deleted successfully!');
+  const handleDeleteLandlord = async (id: string) => {
+    await deleteLandlord(id);
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/auth');
   };
 
   const sidebarItems = [
@@ -169,7 +149,7 @@ const Dashboard = () => {
             <Building className="h-4 w-4 text-green-600 dark:text-green-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-900 dark:text-green-100">24</div>
+            <div className="text-2xl font-bold text-green-900 dark:text-green-100">0</div>
             <p className="text-xs text-green-600 dark:text-green-300">Under management</p>
           </CardContent>
         </Card>
@@ -180,8 +160,8 @@ const Dashboard = () => {
             <CreditCard className="h-4 w-4 text-purple-600 dark:text-purple-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">$12,450</div>
-            <p className="text-xs text-purple-600 dark:text-purple-300">+12% from last month</p>
+            <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">$0</div>
+            <p className="text-xs text-purple-600 dark:text-purple-300">No data yet</p>
           </CardContent>
         </Card>
 
@@ -191,8 +171,8 @@ const Dashboard = () => {
             <LayoutDashboard className="h-4 w-4 text-orange-600 dark:text-orange-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-900 dark:text-orange-100">87%</div>
-            <p className="text-xs text-orange-600 dark:text-orange-300">21 of 24 units occupied</p>
+            <div className="text-2xl font-bold text-orange-900 dark:text-orange-100">0%</div>
+            <p className="text-xs text-orange-600 dark:text-orange-300">No properties yet</p>
           </CardContent>
         </Card>
       </div>
@@ -205,27 +185,19 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-center space-x-4">
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">New landlord registration</p>
-                  <p className="text-xs text-gray-500">John Smith registered 2 hours ago</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-4">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Payment received</p>
-                  <p className="text-xs text-gray-500">$1,250 rent payment for Unit 4B</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-4">
-                <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Property added</p>
-                  <p className="text-xs text-gray-500">New property at 789 Pine St</p>
-                </div>
-              </div>
+              {landlords.length > 0 ? (
+                landlords.slice(0, 3).map((landlord) => (
+                  <div key={landlord.id} className="flex items-center space-x-4">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">New landlord registered</p>
+                      <p className="text-xs text-gray-500">{landlord.name} registered</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-gray-500">No recent activities</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -238,20 +210,16 @@ const Dashboard = () => {
           <CardContent>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">This Month's Collections</span>
-                <Badge className="bg-green-100 text-green-800">$8,900</Badge>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Total Landlords</span>
+                <Badge className="bg-blue-100 text-blue-800">{landlords.length}</Badge>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Pending Payments</span>
-                <Badge variant="outline">$2,100</Badge>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Properties</span>
+                <Badge variant="outline">0</Badge>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Maintenance Requests</span>
-                <Badge className="bg-orange-100 text-orange-800">3 Open</Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Lease Renewals Due</span>
-                <Badge className="bg-blue-100 text-blue-800">5 This Month</Badge>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Payments</span>
+                <Badge variant="outline">0</Badge>
               </div>
             </div>
           </CardContent>
@@ -351,44 +319,59 @@ const Dashboard = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredLandlords.map((landlord) => (
-              <Card key={landlord.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle className="text-lg">{landlord.name}</CardTitle>
-                      <CardDescription>{landlord.email}</CardDescription>
+          {landlordsLoading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-2 text-gray-600">Loading landlords...</p>
+            </div>
+          ) : filteredLandlords.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredLandlords.map((landlord) => (
+                <Card key={landlord.id} className="hover:shadow-lg transition-shadow">
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-lg">{landlord.name}</CardTitle>
+                        <CardDescription>{landlord.email}</CardDescription>
+                      </div>
+                      <div className="flex space-x-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditLandlord(landlord)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteLandlord(landlord.id)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex space-x-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEditLandlord(landlord)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteLandlord(landlord.id)}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                      <p>{landlord.phone}</p>
+                      <p className="truncate">{landlord.address}</p>
+                      <p className="text-xs">Joined: {new Date(landlord.created_at).toLocaleDateString()}</p>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                    <p>{landlord.phone}</p>
-                    <p className="truncate">{landlord.address}</p>
-                    <p className="text-xs">Joined: {landlord.createdAt}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No landlords found</h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                {searchTerm ? 'No landlords match your search.' : 'Get started by adding your first landlord.'}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -567,7 +550,7 @@ const Dashboard = () => {
               >
                 {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
               </Button>
-              <Button variant="ghost" size="sm">
+              <Button variant="ghost" size="sm" onClick={handleSignOut}>
                 <LogOut className="h-5 w-5" />
               </Button>
             </div>
@@ -595,10 +578,7 @@ const Dashboard = () => {
               
               <div className="flex items-center space-x-4">
                 <Button variant="ghost" className="text-sm">
-                  Welcome, Admin
-                </Button>
-                <Button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
-                  Sign with Google
+                  Welcome, {user?.user_metadata?.name || user?.email}
                 </Button>
               </div>
             </div>
